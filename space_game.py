@@ -36,6 +36,14 @@ def distribute_stars_on_sky(canvas, star_symbol, sky_filling):
     return stars_on_sky
 
 
+async def animate_spaceship(canvas, start_row, start_column, frames):
+    for frame in cycle(frames):
+        draw_frame(canvas, start_row, start_column, frame)
+        canvas.refresh()
+        await asyncio.sleep(0)
+        draw_frame(canvas, start_row, start_column, frame, negative=True)
+
+
 async def fire(canvas, start_row, start_column, rows_speed=-0.3, columns_speed=0):
     """Display animation of gun shot, direction and speed can be specified."""
 
@@ -86,8 +94,8 @@ async def draw_blink(canvas, star_coroutines):
         for star_coroutine in star_coroutines:
             star_coroutine.send(None)
         canvas.refresh()
+        await asyncio.sleep(0)
         time.sleep(0.1 * multiplier)
-    await asyncio.sleep(0)
 
 
 async def one_draw_blink(canvas, coroutine):
@@ -98,6 +106,8 @@ async def one_draw_blink(canvas, coroutine):
 
 
 def draw(canvas):
+    frame_files = ["frames/rocket_frame_1.txt", "frames/rocket_frame_2.txt"]
+    frames = [read_file(frame) for frame in frame_files]
     canvas.border()
     curses.curs_set(False)
     stars_on_sky = distribute_stars_on_sky(canvas, STAR_SYMBOLS, SKY_FILLING)
@@ -107,21 +117,24 @@ def draw(canvas):
     window_height, window_width = canvas.getmaxyx()
     start_column = int(window_height // 2)
     start_row = int(window_width // 2)
-    get_fire = False
+    get_fire = True
     fire_coroutine = fire(canvas, start_column, start_row)
+    ship_coroutines = animate_spaceship(canvas, start_column, start_row, frames)
     while True:
         draw_blink_coroutins = draw_blink(canvas, star_coroutines)
         draw_blink_coroutins.send(None)
+
+        ship_coroutines.send(None)
+
         if get_fire:
-            while True:
-                try:
-                    fire_coroutine.send(None)
-                    canvas.refresh()
-                    time.sleep(0.1)
-                except StopIteration:
-                    canvas.border()
-                    get_fire = False
-                    break
+            try:
+                fire_coroutine.send(None)
+                canvas.refresh()
+            except StopIteration:
+                canvas.border()
+                get_fire = False
+
+        time.sleep(0.1)
 
         canvas.refresh()
 
