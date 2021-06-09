@@ -37,7 +37,7 @@ def distribute_stars_on_sky(canvas, star_symbol, sky_filling):
 
 
 async def animate_spaceship(canvas, start_row, start_column, frames):
-    for frame in cycle(frames):
+    for frame in frames:
         draw_frame(canvas, start_row, start_column, frame)
         canvas.refresh()
         await asyncio.sleep(0)
@@ -108,8 +108,9 @@ async def one_draw_blink(canvas, coroutine):
 def draw(canvas):
     frame_files = ["frames/rocket_frame_1.txt", "frames/rocket_frame_2.txt"]
     frames = [read_file(frame) for frame in frame_files]
-    canvas.border()
     curses.curs_set(False)
+    canvas.border()
+    canvas.nodelay(True)
     stars_on_sky = distribute_stars_on_sky(canvas, STAR_SYMBOLS, SKY_FILLING)
     star_coroutines = [
         blink(canvas, star["star_height"], star["star_width"], star["star_symbol"]) for star in stars_on_sky
@@ -117,14 +118,25 @@ def draw(canvas):
     window_height, window_width = canvas.getmaxyx()
     start_column = int(window_height // 2)
     start_row = int(window_width // 2)
-    get_fire = True
+    get_fire = False
     fire_coroutine = fire(canvas, start_column, start_row)
-    ship_coroutines = animate_spaceship(canvas, start_column, start_row, frames)
+    ship_column = start_column
+    ship_row = start_row
+    # ship_coroutines = animate_spaceship(canvas, start_column, start_row, frames)
     while True:
         draw_blink_coroutins = draw_blink(canvas, star_coroutines)
         draw_blink_coroutins.send(None)
-
-        ship_coroutines.send(None)
+        rows_direction, columns_direction, space_pressed = read_controls(canvas)
+        ship_column = ship_column + rows_direction
+        ship_row = ship_row + columns_direction
+        ship_coroutines = animate_spaceship(canvas, ship_column, ship_row, frames)
+        while True:
+            try:
+                ship_coroutines.send(None)
+                time.sleep(0.1)
+                ship_coroutines.send(None)
+            except StopIteration:
+                break
 
         if get_fire:
             try:
