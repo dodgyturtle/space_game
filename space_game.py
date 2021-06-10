@@ -10,18 +10,19 @@ from curses_tools import draw_frame, read_controls
 
 STAR_SYMBOLS = "+*.:"
 SKY_FILLING = 30
+SYMBOL_AREA = 25
 
 
 def read_file(filename):
     with open(filename, "r") as my_file:
-        file_contents = my_file.read()
-    return file_contents
+        file_content = my_file.read()
+    return file_content
 
 
 def distribute_stars_on_sky(canvas, star_symbol, sky_filling):
     stars_on_sky = []
     window_height, window_width = canvas.getmaxyx()
-    sky_filling_number = int((window_height * window_width * sky_filling / 100) // 25)
+    sky_filling_number = int((window_height * window_width * sky_filling / 100) // SYMBOL_AREA)
     for _ in range(sky_filling_number):
         star_symbol = random.choice(STAR_SYMBOLS)
         star_height = random.randint(2, window_height - 2)
@@ -75,34 +76,33 @@ async def fire(canvas, start_row, start_column, rows_speed=-0.3, columns_speed=0
 
 
 async def blink(canvas, row, column, symbol="*"):
+    for _ in range(random.randint(1, 10)):
+        await asyncio.sleep(0)
+
     while True:
         canvas.addstr(row, column, symbol, curses.A_DIM)
         await asyncio.sleep(0)
 
+        for _ in range(20):
+            await asyncio.sleep(0)
+
         canvas.addstr(row, column, symbol, curses.A_NORMAL)
         await asyncio.sleep(0)
+
+        for _ in range(3):
+            await asyncio.sleep(0)
 
         canvas.addstr(row, column, symbol, curses.A_BOLD)
         await asyncio.sleep(0)
 
+        for _ in range(5):
+            await asyncio.sleep(0)
+
         canvas.addstr(row, column, symbol, curses.A_NORMAL)
         await asyncio.sleep(0)
 
-
-async def draw_blink(canvas, star_coroutines):
-    for multiplier in [20, 3, 5, 3]:
-        for star_coroutine in star_coroutines:
-            star_coroutine.send(None)
-        canvas.refresh()
-        await asyncio.sleep(0)
-        time.sleep(0.1 * multiplier)
-
-
-async def one_draw_blink(canvas, coroutine):
-    for multiplier in [20, 3, 5, 3]:
-        coroutine.send(None)
-        time.sleep(0.1 * multiplier)
-    await time.sleep(0)
+        for _ in range(3):
+            await asyncio.sleep(0)
 
 
 def draw(canvas):
@@ -116,20 +116,21 @@ def draw(canvas):
         blink(canvas, star["star_height"], star["star_width"], star["star_symbol"]) for star in stars_on_sky
     ]
     window_height, window_width = canvas.getmaxyx()
-    start_column = int(window_height // 2)
-    start_row = int(window_width // 2)
-    get_fire = False
-    fire_coroutine = fire(canvas, start_column, start_row)
+    start_row = int(window_height // 2)
+    start_column = int(window_width // 2)
+    fire_coroutine = fire(canvas, start_row, start_column)
+    get_fire = True
+
     ship_column = start_column
     ship_row = start_row
-    # ship_coroutines = animate_spaceship(canvas, start_column, start_row, frames)
+
     while True:
-        draw_blink_coroutins = draw_blink(canvas, star_coroutines)
-        draw_blink_coroutins.send(None)
+        for star_coroutine in star_coroutines:
+            star_coroutine.send(None)
         rows_direction, columns_direction, space_pressed = read_controls(canvas)
-        ship_column = ship_column + rows_direction
-        ship_row = ship_row + columns_direction
-        ship_coroutines = animate_spaceship(canvas, ship_column, ship_row, frames)
+        ship_column = ship_column + columns_direction
+        ship_row = ship_row + rows_direction
+        ship_coroutines = animate_spaceship(canvas, ship_row, ship_column, frames)
         while True:
             try:
                 ship_coroutines.send(None)
@@ -141,13 +142,11 @@ def draw(canvas):
         if get_fire:
             try:
                 fire_coroutine.send(None)
-                canvas.refresh()
             except StopIteration:
                 canvas.border()
                 get_fire = False
 
         time.sleep(0.1)
-
         canvas.refresh()
 
 
