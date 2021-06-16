@@ -1,12 +1,10 @@
 import asyncio
-from asyncio.tasks import sleep
-import time
 import curses
 import random
-
+import time
 from itertools import cycle
 
-from curses_tools import draw_frame, read_controls
+from curses_tools import draw_frame, get_frame_size, read_controls
 
 STAR_SYMBOLS = "+*.:"
 SKY_FILLING = 30
@@ -37,12 +35,44 @@ def distribute_stars_on_sky(canvas, star_symbol, sky_filling):
     return stars_on_sky
 
 
-async def animate_spaceship(canvas, start_row, start_column, frames):
+def get_frame_max_size(frames):
+    frames_sizes = [get_frame_size(frame) for frame in frames]
+    frame_max_size = max(frames_sizes, key=max)
+    return frame_max_size
+
+
+def check_frame_crossing_border(canvas, frame_row, frame_column, columns_direction, rows_direction, frames):
+    frame_height, frame_width = get_frame_max_size(frames)
+    window_height, window_width = canvas.getmaxyx()
+    if frame_column <= 1:
+        frame_column = 2
+        return frame_row, frame_column
+
+    if frame_column >= window_width - frame_width - 1:
+        frame_column = window_width - frame_width - 2
+        return frame_row, frame_column
+
+    if frame_row <= 1:
+        frame_row = 2
+        return frame_row, frame_column
+
+    if frame_row >= window_height - frame_height - 1:
+        frame_row = window_height - frame_height - 2
+        return frame_row, frame_column
+
+    return frame_row + rows_direction, frame_column + columns_direction
+
+
+async def animate_spaceship(canvas, ship_row, ship_column, frames):
     for frame in frames:
-        draw_frame(canvas, start_row, start_column, frame)
-        canvas.refresh()
+        draw_frame(canvas, ship_row, ship_column, frame, negative=True)
+    await asyncio.sleep(0)
+
+    for frame in cycle(frames):
+        draw_frame(canvas, ship_row, ship_column, frame)
         await asyncio.sleep(0)
-        draw_frame(canvas, start_row, start_column, frame, negative=True)
+        await asyncio.sleep(0)
+        draw_frame(canvas, ship_row, ship_column, frame, negative=True)
 
 
 async def fire(canvas, start_row, start_column, rows_speed=-0.3, columns_speed=0):
@@ -108,36 +138,42 @@ async def blink(canvas, row, column, symbol="*"):
 def draw(canvas):
     frame_files = ["frames/rocket_frame_1.txt", "frames/rocket_frame_2.txt"]
     frames = [read_file(frame) for frame in frame_files]
+
     curses.curs_set(False)
     canvas.border()
     canvas.nodelay(True)
+
     stars_on_sky = distribute_stars_on_sky(canvas, STAR_SYMBOLS, SKY_FILLING)
     star_coroutines = [
         blink(canvas, star["star_height"], star["star_width"], star["star_symbol"]) for star in stars_on_sky
     ]
+
     window_height, window_width = canvas.getmaxyx()
     start_row = int(window_height // 2)
     start_column = int(window_width // 2)
     fire_coroutine = fire(canvas, start_row, start_column)
-    get_fire = True
+    get_fire = False
 
     ship_column = start_column
     ship_row = start_row
+    ship_coroutine = animate_spaceship(canvas, ship_row, ship_column, frames)
 
     while True:
         for star_coroutine in star_coroutines:
             star_coroutine.send(None)
+
         rows_direction, columns_direction, space_pressed = read_controls(canvas)
-        ship_column = ship_column + columns_direction
-        ship_row = ship_row + rows_direction
-        ship_coroutines = animate_spaceship(canvas, ship_row, ship_column, frames)
-        while True:
-            try:
-                ship_coroutines.send(None)
-                time.sleep(0.1)
-                ship_coroutines.send(None)
-            except StopIteration:
-                break
+
+        if rows_direction or columns_direction:
+            ship_coroutine = animate_spaceship(canvas, ship_row, ship_column, frames)
+            ship_coroutine.send(None)
+            ship_row, ship_column = check_frame_crossing_border(
+                canvas, ship_row, ship_column, columns_direction, rows_direction, frames
+            )
+            ship_coroutine = animate_spaceship(canvas, ship_row, ship_column, frames)
+
+        ship_coroutine.send(None)
+        canvas.border()
 
         if get_fire:
             try:
@@ -146,8 +182,8 @@ def draw(canvas):
                 canvas.border()
                 get_fire = False
 
-        time.sleep(0.1)
         canvas.refresh()
+        time.sleep(0.1)
 
 
 if __name__ == "__main__":
