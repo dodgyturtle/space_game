@@ -17,19 +17,19 @@ def read_file(filename):
     return file_content
 
 
-def distribute_stars_on_sky(canvas, star_symbol, sky_filling):
+def distribute_stars_in_sky(canvas, star_symbol, sky_filling):
     stars_on_sky = []
     window_height, window_width = canvas.getmaxyx()
     sky_filling_number = int((window_height * window_width * sky_filling / 100) // SYMBOL_AREA)
     for _ in range(sky_filling_number):
         star_symbol = random.choice(STAR_SYMBOLS)
-        star_height = random.randint(2, window_height - 2)
-        star_width = random.randint(2, window_width - 2)
+        star_row = random.randint(2, window_height - 2)
+        star_column = random.randint(2, window_width - 2)
         stars_on_sky.append(
             {
                 "star_symbol": star_symbol,
-                "star_height": star_height,
-                "star_width": star_width,
+                "star_row": star_row,
+                "star_column": star_column,
             }
         )
     return stars_on_sky
@@ -143,9 +143,9 @@ def draw(canvas):
     canvas.border()
     canvas.nodelay(True)
 
-    stars_on_sky = distribute_stars_on_sky(canvas, STAR_SYMBOLS, SKY_FILLING)
+    stars_in_sky = distribute_stars_in_sky(canvas, STAR_SYMBOLS, SKY_FILLING)
     star_coroutines = [
-        blink(canvas, star["star_height"], star["star_width"], star["star_symbol"]) for star in stars_on_sky
+        blink(canvas, star["star_row"], star["star_column"], star["star_symbol"]) for star in stars_in_sky
     ]
 
     window_height, window_width = canvas.getmaxyx()
