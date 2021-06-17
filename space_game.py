@@ -152,7 +152,7 @@ def draw(canvas):
     start_row = int(window_height // 2)
     start_column = int(window_width // 2)
     fire_coroutine = fire(canvas, start_row, start_column)
-    get_fire = False
+    fireshot = False
 
     ship_column = start_column
     ship_row = start_row
@@ -175,7 +175,7 @@ def draw(canvas):
         ship_coroutine.send(None)
         canvas.border()
 
-        if get_fire:
+        if fireshot:
             try:
                 fire_coroutine.send(None)
             except StopIteration:
