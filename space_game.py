@@ -71,6 +71,7 @@ async def animate_spaceship(canvas, ship_row, ship_column, frames):
     for frame in cycle(frames):
         draw_frame(canvas, ship_row, ship_column, frame)
         await asyncio.sleep(0)
+        draw_frame(canvas, ship_row, ship_column, frame)
         await asyncio.sleep(0)
         draw_frame(canvas, ship_row, ship_column, frame, negative=True)
 
@@ -171,6 +172,7 @@ def draw(canvas):
                 canvas, ship_row, ship_column, columns_direction, rows_direction, frames
             )
             ship_coroutine = animate_spaceship(canvas, ship_row, ship_column, frames)
+            ship_coroutine.send(None)
 
         ship_coroutine.send(None)
         canvas.border()
