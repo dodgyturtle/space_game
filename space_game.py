@@ -1,20 +1,57 @@
 import asyncio
 import curses
+from os import execlp
 import random
 import time
 from itertools import cycle
+from types import coroutine
 
 from curses_tools import draw_frame, get_frame_size, read_controls
 
 STAR_SYMBOLS = "+*.:"
 SKY_FILLING = 30
 SYMBOL_AREA = 25
+GARBAGE_COUNT = 6
+GARBAGE_COROTINES = []
 
 
 def read_file(filename):
     with open(filename, "r") as my_file:
         file_content = my_file.read()
     return file_content
+
+
+def get_frame_max_size(frames):
+    frames_sizes = [get_frame_size(frame) for frame in frames]
+    frame_max_size = max(frames_sizes, key=max)
+    return frame_max_size
+
+
+async def fly_garbage(canvas, column, garbage_frame, speed=0.5):
+    """Animate garbage, flying from top to bottom. Сolumn position will stay same, as specified on start."""
+    rows_number, columns_number = canvas.getmaxyx()
+
+    column = max(column, 0)
+    column = min(column, columns_number - 1)
+
+    row = 0
+
+    while row < rows_number:
+        draw_frame(canvas, row, column, garbage_frame)
+        await asyncio.sleep(0)
+        draw_frame(canvas, row, column, garbage_frame, negative=True)
+        row += speed
+
+
+async def fill_orbit_with_garbage(canvas):
+    window_height, window_width = canvas.getmaxyx()
+    garbage_frame_files = ["frames/trash_large.txt", "frames/trash_small.txt", "frames/trash_xl.txt"]
+    garbage_frames = [read_file(garbage_frame) for garbage_frame in garbage_frame_files]
+    frame_height, frame_width = get_frame_max_size(garbage_frames)
+    garbage_column = random.randint(2, window_width - frame_width - 2)
+    garbage_frame = random.choice(garbage_frames)
+    GARBAGE_COROTINES.append(fly_garbage(canvas, garbage_column, garbage_frame))
+    await asyncio.sleep(0)
 
 
 def distribute_stars_in_sky(canvas, star_symbol, sky_filling):
@@ -33,12 +70,6 @@ def distribute_stars_in_sky(canvas, star_symbol, sky_filling):
             }
         )
     return stars_on_sky
-
-
-def get_frame_max_size(frames):
-    frames_sizes = [get_frame_size(frame) for frame in frames]
-    frame_max_size = max(frames_sizes, key=max)
-    return frame_max_size
 
 
 def check_frame_crossing_border(canvas, frame_row, frame_column, columns_direction, rows_direction, frames):
@@ -136,9 +167,26 @@ async def blink(canvas, row, column, symbol="*"):
             await asyncio.sleep(0)
 
 
+async def animate_garbage(canvas):
+    start_number = 0
+    while True:
+        for coroutine_index in range(start_number + 1):
+            try:
+                GARBAGE_COROTINES[coroutine_index].send(None)
+            except StopIteration:
+                GARBAGE_COROTINES.remove(GARBAGE_COROTINES[coroutine_index])
+                garbage_fill_corotine = fill_orbit_with_garbage(canvas)
+                garbage_fill_corotine.send(None)
+
+        start_number += 1
+        if start_number == GARBAGE_COUNT:
+            start_number = 0
+        await asyncio.sleep(0)
+
+
 def draw(canvas):
-    frame_files = ["frames/rocket_frame_1.txt", "frames/rocket_frame_2.txt"]
-    frames = [read_file(frame) for frame in frame_files]
+    rocket_frame_files = ["frames/rocket_frame_1.txt", "frames/rocket_frame_2.txt"]
+    rocket_frames = [read_file(rocket_frame) for rocket_frame in rocket_frame_files]
 
     curses.curs_set(False)
     canvas.border()
@@ -157,21 +205,28 @@ def draw(canvas):
 
     ship_column = start_column
     ship_row = start_row
-    ship_coroutine = animate_spaceship(canvas, ship_row, ship_column, frames)
+    ship_coroutine = animate_spaceship(canvas, ship_row, ship_column, rocket_frames)
 
+    for _ in range(GARBAGE_COUNT):
+        garbage_fill_corotine = fill_orbit_with_garbage(canvas)
+        garbage_fill_corotine.send(None)
+
+    garbage_fly_corotine = animate_garbage(canvas)
     while True:
         for star_coroutine in star_coroutines:
             star_coroutine.send(None)
 
+        garbage_fly_corotine.send(None)
+
         rows_direction, columns_direction, space_pressed = read_controls(canvas)
 
         if rows_direction or columns_direction:
-            ship_coroutine = animate_spaceship(canvas, ship_row, ship_column, frames)
+            ship_coroutine = animate_spaceship(canvas, ship_row, ship_column, rocket_frames)
             ship_coroutine.send(None)
             ship_row, ship_column = check_frame_crossing_border(
-                canvas, ship_row, ship_column, columns_direction, rows_direction, frames
+                canvas, ship_row, ship_column, columns_direction, rows_direction, rocket_frames
             )
-            ship_coroutine = animate_spaceship(canvas, ship_row, ship_column, frames)
+            ship_coroutine = animate_spaceship(canvas, ship_row, ship_column, rocket_frames)
             ship_coroutine.send(None)
 
         ship_coroutine.send(None)
