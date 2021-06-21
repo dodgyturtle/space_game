@@ -7,6 +7,7 @@ from itertools import cycle
 from types import coroutine
 
 from curses_tools import draw_frame, get_frame_size, read_controls
+from physics import update_speed
 
 STAR_SYMBOLS = "+*.:"
 SKY_FILLING = 30
@@ -25,6 +26,33 @@ def get_frame_max_size(frames):
     frames_sizes = [get_frame_size(frame) for frame in frames]
     frame_max_size = max(frames_sizes, key=max)
     return frame_max_size
+
+
+def apply_ship_acceleration(rows_direction, columns_direction):
+    if rows_direction == -1:
+        row_speed, column_speed = update_speed(rows_direction, columns_direction, -1, 0)
+        rows_direction = rows_direction + row_speed
+    if rows_direction == 0:
+        row_speed, column_speed = update_speed(rows_direction, columns_direction, 0, 0)
+        rows_direction = rows_direction + row_speed
+    if rows_direction == 1:
+        row_speed, column_speed = update_speed(rows_direction, columns_direction, 1, 0)
+        rows_direction = rows_direction + row_speed
+    if columns_direction == -1:
+        row_speed, column_speed = update_speed(rows_direction, columns_direction, 0, -1)
+        columns_direction = columns_direction + column_speed
+    if columns_direction == 0:
+        row_speed, column_speed = update_speed(rows_direction, columns_direction, 0, 0)
+        columns_direction = columns_direction + column_speed
+    if columns_direction == 1:
+        row_speed, column_speed = update_speed(rows_direction, columns_direction, 0, 1)
+        columns_direction = columns_direction + column_speed
+    return rows_direction, columns_direction
+
+
+async def sleep(tics=1):
+    for _ in range(tics):
+        await asyncio.sleep(0)
 
 
 async def fly_garbage(canvas, column, garbage_frame, speed=0.5):
@@ -139,32 +167,28 @@ async def fire(canvas, start_row, start_column, rows_speed=-0.3, columns_speed=0
 
 async def blink(canvas, row, column, symbol="*"):
     for _ in range(random.randint(1, 10)):
-        await asyncio.sleep(0)
+        await sleep(random.randint(1, 10))
 
     while True:
         canvas.addstr(row, column, symbol, curses.A_DIM)
         await asyncio.sleep(0)
 
-        for _ in range(20):
-            await asyncio.sleep(0)
+        await sleep(20)
 
         canvas.addstr(row, column, symbol, curses.A_NORMAL)
         await asyncio.sleep(0)
 
-        for _ in range(3):
-            await asyncio.sleep(0)
+        await sleep(3)
 
         canvas.addstr(row, column, symbol, curses.A_BOLD)
         await asyncio.sleep(0)
 
-        for _ in range(5):
-            await asyncio.sleep(0)
+        await sleep(5)
 
         canvas.addstr(row, column, symbol, curses.A_NORMAL)
         await asyncio.sleep(0)
 
-        for _ in range(3):
-            await asyncio.sleep(0)
+        await sleep(3)
 
 
 async def animate_garbage(canvas):
@@ -221,6 +245,7 @@ def draw(canvas):
         rows_direction, columns_direction, space_pressed = read_controls(canvas)
 
         if rows_direction or columns_direction:
+            rows_direction, columns_direction = apply_ship_acceleration(rows_direction, columns_direction)
             ship_coroutine = animate_spaceship(canvas, ship_row, ship_column, rocket_frames)
             ship_coroutine.send(None)
             ship_row, ship_column = check_frame_crossing_border(
