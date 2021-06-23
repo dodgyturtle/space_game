@@ -1,14 +1,15 @@
 import asyncio
 import curses
-from os import execlp
 import random
 import time
 from itertools import cycle
+from os import execlp
 from types import coroutine
 
 from curses_tools import draw_frame, get_frame_size, read_controls
+from explosion import explode
+from obstacles import Obstacle
 from physics import update_speed
-from obstacles import Obstacle, show_obstacles, has_collision
 
 STAR_SYMBOLS = "+*.:"
 SKY_FILLING = 30
@@ -78,6 +79,7 @@ async def fly_garbage(canvas, column, garbage_frame, speed=0.5):
             OBSTACLES_IN_LAST_COLLISIONS.remove(obstacle)
             OBSTACLES.remove(obstacle)
             draw_frame(canvas, row, column, garbage_frame, negative=True)
+            await explode(canvas, row, column)
             return
         draw_frame(canvas, row, column, garbage_frame, negative=True)
         try:
