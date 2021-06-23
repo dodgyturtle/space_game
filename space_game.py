@@ -3,8 +3,6 @@ import curses
 import random
 import time
 from itertools import cycle
-from os import execlp
-from types import coroutine
 
 from curses_tools import draw_frame, get_frame_size, read_controls
 from explosion import explode
@@ -55,51 +53,6 @@ def apply_ship_acceleration(rows_direction, columns_direction):
     return rows_direction, columns_direction
 
 
-async def sleep(tics=1):
-    for _ in range(tics):
-        await asyncio.sleep(0)
-
-
-async def fly_garbage(canvas, column, garbage_frame, speed=0.5):
-    """Animate garbage, flying from top to bottom. Сolumn position will stay same, as specified on start."""
-    rows_number, columns_number = canvas.getmaxyx()
-
-    column = max(column, 0)
-    column = min(column, columns_number - 1)
-
-    row = 0
-
-    while row < rows_number:
-        draw_frame(canvas, row, column, garbage_frame)
-        frame_height, frame_width = get_frame_size(garbage_frame)
-        obstacle = Obstacle(row, column, frame_height, frame_width)
-        OBSTACLES.append(obstacle)
-        await asyncio.sleep(0)
-        if obstacle in OBSTACLES_IN_LAST_COLLISIONS:
-            OBSTACLES_IN_LAST_COLLISIONS.remove(obstacle)
-            OBSTACLES.remove(obstacle)
-            draw_frame(canvas, row, column, garbage_frame, negative=True)
-            await explode(canvas, row, column)
-            return
-        draw_frame(canvas, row, column, garbage_frame, negative=True)
-        try:
-            OBSTACLES.remove(obstacle)
-        except:
-            pass
-        row += speed
-
-
-async def fill_orbit_with_garbage(canvas):
-    window_height, window_width = canvas.getmaxyx()
-    garbage_frame_files = ["frames/trash_large.txt", "frames/trash_small.txt", "frames/trash_xl.txt"]
-    garbage_frames = [read_file(garbage_frame) for garbage_frame in garbage_frame_files]
-    frame_height, frame_width = get_frame_max_size(garbage_frames)
-    garbage_column = random.randint(2, window_width - frame_width - 2)
-    garbage_frame = random.choice(garbage_frames)
-    GARBAGE_COROTINES.append(fly_garbage(canvas, garbage_column, garbage_frame))
-    await asyncio.sleep(0)
-
-
 def distribute_stars_in_sky(canvas, star_symbol, sky_filling):
     stars_on_sky = []
     window_height, window_width = canvas.getmaxyx()
@@ -140,12 +93,68 @@ def check_frame_crossing_border(canvas, frame_row, frame_column, columns_directi
     return frame_row + rows_direction, frame_column + columns_direction
 
 
+def show_gameover(canvas):
+    window_height, window_width = canvas.getmaxyx()
+    game_over_text = read_file("frames/game_over.txt")
+    frame_height, frame_width = get_frame_size(game_over_text)
+    game_over_column = (window_height - frame_height) // 2
+    game_over_row = (window_width - frame_width) // 2
+    draw_frame(canvas, game_over_column, game_over_row, game_over_text)
+
+
+async def sleep(tics=1):
+    for _ in range(tics):
+        await asyncio.sleep(0)
+
+
+async def fly_garbage(canvas, column, garbage_frame, speed=0.5):
+    """Animate garbage, flying from top to bottom. Сolumn position will stay same, as specified on start."""
+    rows_number, columns_number = canvas.getmaxyx()
+
+    column = max(column, 0)
+    column = min(column, columns_number - 1)
+
+    row = 0
+
+    while row < rows_number:
+        draw_frame(canvas, row, column, garbage_frame)
+        frame_height, frame_width = get_frame_size(garbage_frame)
+        obstacle = Obstacle(row, column, frame_height, frame_width)
+        OBSTACLES.append(obstacle)
+        await asyncio.sleep(0)
+        if obstacle in OBSTACLES_IN_LAST_COLLISIONS:
+            OBSTACLES_IN_LAST_COLLISIONS.remove(obstacle)
+            OBSTACLES.remove(obstacle)
+            draw_frame(canvas, row, column, garbage_frame, negative=True)
+            await explode(canvas, row, column)
+            return
+        draw_frame(canvas, row, column, garbage_frame, negative=True)
+        OBSTACLES.remove(obstacle)
+        row += speed
+
+
+async def fill_orbit_with_garbage(canvas):
+    window_height, window_width = canvas.getmaxyx()
+    garbage_frame_files = ["frames/trash_large.txt", "frames/trash_small.txt", "frames/trash_xl.txt"]
+    garbage_frames = [read_file(garbage_frame) for garbage_frame in garbage_frame_files]
+    frame_height, frame_width = get_frame_max_size(garbage_frames)
+    garbage_column = random.randint(2, window_width - frame_width - 2)
+    garbage_frame = random.choice(garbage_frames)
+    GARBAGE_COROTINES.append(fly_garbage(canvas, garbage_column, garbage_frame))
+    await asyncio.sleep(0)
+
+
 async def animate_spaceship(canvas, ship_row, ship_column, frames):
     for frame in frames:
         draw_frame(canvas, ship_row, ship_column, frame, negative=True)
     await asyncio.sleep(0)
 
     for frame in cycle(frames):
+        for obstacle in OBSTACLES:
+            if obstacle.has_collision(ship_row, ship_column):
+                while True:
+                    show_gameover(canvas)
+                    await asyncio.sleep(0)
         draw_frame(canvas, ship_row, ship_column, frame)
         await asyncio.sleep(0)
         draw_frame(canvas, ship_row, ship_column, frame)
@@ -279,6 +288,7 @@ def draw(canvas):
 
         if rows_direction or columns_direction:
             rows_direction, columns_direction = apply_ship_acceleration(rows_direction, columns_direction)
+
             ship_coroutine = animate_spaceship(canvas, ship_row, ship_column, rocket_frames)
             ship_coroutine.send(None)
             ship_row, ship_column = check_frame_crossing_border(
