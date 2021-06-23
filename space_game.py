@@ -17,6 +17,7 @@ GARBAGE_COUNT = 6
 GARBAGE_COROTINES = []
 FIRE_COROTINES = []
 OBSTACLES = []
+OBSTACLES_IN_LAST_COLLISIONS = []
 
 
 def read_file(filename):
@@ -72,10 +73,17 @@ async def fly_garbage(canvas, column, garbage_frame, speed=0.5):
         frame_height, frame_width = get_frame_size(garbage_frame)
         obstacle = Obstacle(row, column, frame_height, frame_width)
         OBSTACLES.append(obstacle)
-        # canvas.addstr(1, 1, f"{Obstacle(row, column, frame_height, frame_width) }")
         await asyncio.sleep(0)
+        if obstacle in OBSTACLES_IN_LAST_COLLISIONS:
+            OBSTACLES_IN_LAST_COLLISIONS.remove(obstacle)
+            OBSTACLES.remove(obstacle)
+            draw_frame(canvas, row, column, garbage_frame, negative=True)
+            return
         draw_frame(canvas, row, column, garbage_frame, negative=True)
-        OBSTACLES.remove(obstacle)
+        try:
+            OBSTACLES.remove(obstacle)
+        except:
+            pass
         row += speed
 
 
@@ -169,6 +177,8 @@ async def fire(canvas, start_row, start_column, rows_speed=-0.3, columns_speed=0
         canvas.addstr(round(row), round(column), symbol)
         for obstacle in OBSTACLES:
             if obstacle.has_collision(round(row), round(column)):
+                OBSTACLES_IN_LAST_COLLISIONS.append(obstacle)
+                canvas.addstr(round(row), round(column), " ")
                 return
         await asyncio.sleep(0)
         canvas.addstr(round(row), round(column), " ")
@@ -236,8 +246,8 @@ def draw(canvas):
     rocket_frames = [read_file(rocket_frame) for rocket_frame in rocket_frame_files]
 
     curses.curs_set(False)
-    canvas.border()
     canvas.nodelay(True)
+    canvas.border()
 
     stars_in_sky = distribute_stars_in_sky(canvas, STAR_SYMBOLS, SKY_FILLING)
     star_coroutines = [
