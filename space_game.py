@@ -8,12 +8,15 @@ from types import coroutine
 
 from curses_tools import draw_frame, get_frame_size, read_controls
 from physics import update_speed
+from obstacles import Obstacle, show_obstacles, has_collision
 
 STAR_SYMBOLS = "+*.:"
 SKY_FILLING = 30
 SYMBOL_AREA = 25
 GARBAGE_COUNT = 6
 GARBAGE_COROTINES = []
+FIRE_COROTINES = []
+OBSTACLES = []
 
 
 def read_file(filename):
@@ -66,8 +69,13 @@ async def fly_garbage(canvas, column, garbage_frame, speed=0.5):
 
     while row < rows_number:
         draw_frame(canvas, row, column, garbage_frame)
+        frame_height, frame_width = get_frame_size(garbage_frame)
+        obstacle = Obstacle(row, column, frame_height, frame_width)
+        OBSTACLES.append(obstacle)
+        # canvas.addstr(1, 1, f"{Obstacle(row, column, frame_height, frame_width) }")
         await asyncio.sleep(0)
         draw_frame(canvas, row, column, garbage_frame, negative=True)
+        OBSTACLES.remove(obstacle)
         row += speed
 
 
@@ -159,6 +167,9 @@ async def fire(canvas, start_row, start_column, rows_speed=-0.3, columns_speed=0
 
     while 0 < row < max_row and 0 < column < max_column:
         canvas.addstr(round(row), round(column), symbol)
+        for obstacle in OBSTACLES:
+            if obstacle.has_collision(round(row), round(column)):
+                return
         await asyncio.sleep(0)
         canvas.addstr(round(row), round(column), " ")
         row += rows_speed
@@ -208,6 +219,18 @@ async def animate_garbage(canvas):
         await asyncio.sleep(0)
 
 
+async def do_fireshot(canvas, ship_row, ship_column, fireshot):
+    if fireshot:
+        FIRE_COROTINES.append(fire(canvas, ship_row, ship_column))
+    while True:
+        for fire_coroutine in FIRE_COROTINES:
+            try:
+                fire_coroutine.send(None)
+            except StopIteration:
+                FIRE_COROTINES.remove(fire_coroutine)
+        await asyncio.sleep(0)
+
+
 def draw(canvas):
     rocket_frame_files = ["frames/rocket_frame_1.txt", "frames/rocket_frame_2.txt"]
     rocket_frames = [read_file(rocket_frame) for rocket_frame in rocket_frame_files]
@@ -224,8 +247,6 @@ def draw(canvas):
     window_height, window_width = canvas.getmaxyx()
     start_row = int(window_height // 2)
     start_column = int(window_width // 2)
-    fire_coroutine = fire(canvas, start_row, start_column)
-    fireshot = False
 
     ship_column = start_column
     ship_row = start_row
@@ -257,12 +278,10 @@ def draw(canvas):
         ship_coroutine.send(None)
         canvas.border()
 
-        if fireshot:
-            try:
-                fire_coroutine.send(None)
-            except StopIteration:
-                canvas.border()
-                get_fire = False
+        fireshot_coroutine = do_fireshot(canvas, ship_row, ship_column + 2, space_pressed)
+        fireshot_coroutine.send(None)
+
+        canvas.border()
 
         canvas.refresh()
         time.sleep(0.1)
